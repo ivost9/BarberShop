@@ -4,7 +4,10 @@ import { Toaster, toast } from "react-hot-toast";
 
 // ВГРАДЕН КАЛЕНДАР (за да няма грешки с външни библиотеки)
 // FIX: Използваме директен URL или безопасна проверка, за да избегнем "process is not defined"
-const API = "http://localhost:5000/api";
+const API =
+  window.location.hostname === "localhost"
+    ? "http://localhost:5000/api"
+    : "https://barbershop-f3qp.onrender.com/api";
 
 const theme = {
   bg: "min-h-screen bg-zinc-900 text-zinc-100 font-sans",
