@@ -812,9 +812,6 @@ const ClientDashboard = ({ token, username }) => {
                 ПОДСТРИГВАНЕ
               </h3>
               <p className="text-zinc-400">Класическо мъжко подстригване</p>
-              <div className="mt-4 inline-block bg-zinc-800 text-amber-500 font-mono px-3 py-1 rounded border border-zinc-700">
-                30 МИН
-              </div>
             </div>
 
             <div
@@ -828,9 +825,6 @@ const ClientDashboard = ({ token, username }) => {
                 КОСА + БРАДА
               </h3>
               <p className="text-zinc-400">Пълен пакет грижа за визията</p>
-              <div className="mt-4 inline-block bg-zinc-800 text-amber-500 font-mono px-3 py-1 rounded border border-zinc-700">
-                60 МИН
-              </div>
             </div>
           </div>
         </div>
