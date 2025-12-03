@@ -8,7 +8,7 @@ const seedAdmin = async () => {
 
     if (!adminExists) {
       // 2. Дефинираме парола (може да е от .env или твърда стойност за тест)
-      const plainPassword = process.env.ADMIN_DEFAULT_PASSWORD || "admin12345";
+      const plainPassword = "admin12345";
 
       // 3. Хешираме паролата
       const hashedPassword = await bcrypt.hash(plainPassword, 10);

@@ -1,27 +1,89 @@
+// require("dotenv").config();
+// const express = require("express");
+// const cors = require("cors");
+
+// // 1. Импорт на конфигурацията за базата данни
+// const connectDB = require("./config/db");
+
+// // 2. Импорт на пътищата (Routes)
+// const authRoutes = require("./routes/authRoutes");
+// const appointmentRoutes = require("./routes/appointmentRoutes");
+// const adminRoutes = require("./routes/adminRoutes");
+
+// // 3. Импорт на помощните скриптове
+// const cleanupOldAppointments = require("./utils/cronJobs");
+// const seedAdmin = require("./utils/seeder");
+
+// const app = express();
+
+// // --- CONFIGURATION ---
+// const PORT = process.env.PORT || 5000;
+// const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+
+// // --- MIDDLEWARE ---
+// app.use(express.json()); // Позволява четене на JSON в body
+// app.use(
+//   cors({
+//     origin: FRONTEND_URL,
+//     methods: ["GET", "POST", "PUT", "DELETE"],
+//     credentials: true,
+//   })
+// );
+
+// // --- ROUTES MOUNTING ---
+// // Тук казваме на Express кой файл за кои URL-и отговаря
+
+// // За Auth (register, login, me) -> ще станат /api/register, /api/login
+// app.use("/api", authRoutes);
+
+// // За Appointments (book, list, cancel) -> ще станат /api/book, /api/appointments
+// app.use("/api", appointmentRoutes);
+
+// // За Admin -> ще станат /api/admin/all, /api/admin/users
+// app.use("/api/admin", adminRoutes);
+
+// // --- DB CONNECTION & SERVER START ---
+// connectDB()
+//   .then(async () => {
+//     // Тази част се изпълнява само след успешна връзка с базата
+
+//     // 1. Създаване на служебен админ (ако няма такъв)
+//     await seedAdmin();
+
+//     // 2. Първоначално почистване на стари часове
+//     await cleanupOldAppointments();
+
+//     // 3. Настройване на автоматично почистване (на всеки 1 час)
+//     // 3600000 ms = 1 час
+//     setInterval(cleanupOldAppointments, 3600000);
+
+//     // 4. Стартиране на сървъра
+//     app.listen(PORT, () => {
+//       console.log(`🚀 Server running on port ${PORT}`);
+//       console.log(`🌐 Frontend allowed from: ${FRONTEND_URL}`);
+//     });
+//   })
+//   .catch((err) => {
+//     console.error("❌ Failed to connect to Database. Server shutting down.");
+//     process.exit(1); // Спира процеса, ако няма база данни
+//   });
 require("dotenv").config();
 const express = require("express");
+const mongoose = require("mongoose");
 const cors = require("cors");
-
-// 1. Импорт на конфигурацията за базата данни
-const connectDB = require("./config/db");
-
-// 2. Импорт на пътищата (Routes)
-const authRoutes = require("./routes/authRoutes");
-const appointmentRoutes = require("./routes/appointmentRoutes");
-const adminRoutes = require("./routes/adminRoutes");
-
-// 3. Импорт на помощните скриптове
-const cleanupOldAppointments = require("./utils/cronJobs");
-const seedAdmin = require("./utils/seeder");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 
 const app = express();
+app.use(express.json());
 
-// --- CONFIGURATION ---
+// --- КОНФИГУРАЦИЯ ---
 const PORT = process.env.PORT || 5000;
+const MONGO_URI =
+  process.env.MONGO_URI || "mongodb://localhost:27017/barber_shop";
+const JWT_SECRET = process.env.JWT_SECRET || "secret_diploma_key_123";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
-// --- MIDDLEWARE ---
-app.use(express.json()); // Позволява четене на JSON в body
 app.use(
   cors({
     origin: FRONTEND_URL,
@@ -30,40 +92,331 @@ app.use(
   })
 );
 
-// --- ROUTES MOUNTING ---
-// Тук казваме на Express кой файл за кои URL-и отговаря
+// --- DATABASE MODELS ---
 
-// За Auth (register, login, me) -> ще станат /api/register, /api/login
-app.use("/api", authRoutes);
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
+  phone: { type: String, required: true },
+  role: { type: String, default: "client" },
+  isBlocked: { type: Boolean, default: false },
+  noShowCount: { type: Number, default: 0 },
+});
+const User = mongoose.model("User", userSchema);
 
-// За Appointments (book, list, cancel) -> ще станат /api/book, /api/appointments
-app.use("/api", appointmentRoutes);
+const appointmentSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  username: String,
+  clientName: String,
+  date: Date,
+  status: { type: String, default: "active" },
+  serviceType: { type: String, default: "hair" },
+  duration: { type: Number, default: 30 },
+});
+const Appointment = mongoose.model("Appointment", appointmentSchema);
 
-// За Admin -> ще станат /api/admin/all, /api/admin/users
-app.use("/api/admin", adminRoutes);
+const settingsSchema = new mongoose.Schema({
+  acceptingNewClients: { type: Boolean, default: true },
+});
+const Settings = mongoose.model("Settings", settingsSchema);
 
-// --- DB CONNECTION & SERVER START ---
-connectDB()
+// --- MIDDLEWARE ---
+const auth = (req, res, next) => {
+  const token = req.header("Authorization");
+  if (!token) return res.status(401).json({ error: "Access denied" });
+  try {
+    const verified = jwt.verify(token, JWT_SECRET);
+    req.user = verified;
+    next();
+  } catch (err) {
+    res.status(400).json({ error: "Invalid token" });
+  }
+};
+
+// --- ROUTES ---
+
+// 0. GET SETTINGS
+app.get("/api/settings", async (req, res) => {
+  let settings = await Settings.findOne();
+  if (!settings) {
+    settings = await Settings.create({});
+  }
+  res.json(settings);
+});
+
+// 1. REGISTER
+app.post("/api/register", async (req, res) => {
+  const settings = await Settings.findOne();
+  if (settings && !settings.acceptingNewClients) {
+    return res
+      .status(403)
+      .json({ error: "За съжаление, в момента не приемаме нови клиенти." });
+  }
+
+  const { username, password, firstName, lastName, phone } = req.body;
+
+  if (!firstName || !lastName || !phone) {
+    return res.status(400).json({ error: "Моля попълнете всички полета." });
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  try {
+    await User.create({
+      username,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      phone, // Запазваме телефона
+    });
+    res.json({ message: "User created" });
+  } catch (err) {
+    res.status(400).json({ error: "Username already exists" });
+  }
+});
+
+// 2. LOGIN
+app.post("/api/login", async (req, res) => {
+  const { username, password } = req.body;
+  const user = await User.findOne({ username });
+  if (!user) return res.status(400).json({ error: "User not found" });
+
+  if (user.isBlocked)
+    return res
+      .status(403)
+      .json({ error: "Вашият профил е блокиран поради неявяване." });
+
+  const validPass = await bcrypt.compare(password, user.password);
+  if (!validPass) return res.status(400).json({ error: "Invalid password" });
+
+  const token = jwt.sign({ _id: user._id, role: user.role }, JWT_SECRET);
+  res.json({
+    token,
+    role: user.role,
+    username: user.username,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    phone: user.phone,
+  });
+});
+
+// 3. GET USER PROFILE
+app.get("/api/me", auth, async (req, res) => {
+  const user = await User.findById(req.user._id).select("-password");
+  res.json(user);
+});
+
+// 4. GET APPOINTMENTS
+app.get("/api/appointments", async (req, res) => {
+  // Връща само активните часове
+  const appointments = await Appointment.find({ status: "active" });
+  res.json(appointments);
+});
+
+// 5. BOOK APPOINTMENT
+app.post("/api/book", auth, async (req, res) => {
+  const { date, serviceType } = req.body;
+
+  const duration = serviceType === "full" ? 60 : 30;
+  const requestedStart = new Date(date);
+  const requestedEnd = new Date(requestedStart.getTime() + duration * 60000);
+
+  const existing = await Appointment.findOne({
+    userId: req.user._id,
+    status: "active",
+    date: { $gt: new Date() },
+  });
+
+  if (existing) {
+    return res.status(400).json({
+      error:
+        "Имате предстоящ час. Не може да пазите втори преди да мине първият.",
+    });
+  }
+
+  const startOfDay = new Date(requestedStart);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(requestedStart);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const dayAppointments = await Appointment.find({
+    status: "active",
+    date: { $gte: startOfDay, $lte: endOfDay },
+  });
+
+  const hasConflict = dayAppointments.some((app) => {
+    const appStart = new Date(app.date);
+    const appDuration = app.duration || 30;
+    const appEnd = new Date(appStart.getTime() + appDuration * 60000);
+    return appStart < requestedEnd && appEnd > requestedStart;
+  });
+
+  if (hasConflict) {
+    return res.status(400).json({ error: "Този час вече е зает." });
+  }
+
+  const user = await User.findById(req.user._id);
+
+  await Appointment.create({
+    userId: user._id,
+    username: user.username,
+    clientName: `${user.firstName} ${user.lastName}`,
+    date: date,
+    serviceType: serviceType || "hair",
+    duration: duration,
+  });
+
+  res.json({ message: "Success" });
+});
+
+// 6. CANCEL APPOINTMENT - ТОВА ТРИЕ ЗАПИСА
+app.post("/api/cancel", auth, async (req, res) => {
+  const { id } = req.body;
+  const appointment = await Appointment.findById(id);
+
+  if (!appointment) return res.status(404).json({ error: "Not found" });
+
+  // Ако е админ, може да трие веднага. Ако е клиент - проверка за време.
+  if (req.user.role !== "admin") {
+    const appointmentTime = new Date(appointment.date).getTime();
+    const currentTime = new Date().getTime();
+    const hoursDiff = (appointmentTime - currentTime) / (1000 * 60 * 60);
+
+    if (hoursDiff < 12) {
+      return res.status(400).json({
+        error: "Твърде късно е за отказ онлайн. Моля свържете се с нас.",
+      });
+    }
+  }
+
+  // ВАЖНО: deleteOne или findByIdAndDelete, за да не остава в базата
+  await Appointment.findByIdAndDelete(id);
+  res.json({ message: "Deleted" });
+});
+
+// 7. ADMIN ACTIONS - GET ALL APPOINTMENTS (ФИЛТРИРАНО)
+app.get("/api/admin/all", auth, async (req, res) => {
+  if (req.user.role !== "admin") return res.status(403).send("No access");
+
+  // ВАЖНО: Връщаме всичко, КОЕТО НЕ Е 'cancelled' (за всеки случай, ако има остатъци)
+  // Всъщност, тъй като вече трием, тук ще излизат само 'active' и 'noshow'.
+  const apps = await Appointment.find({ status: { $ne: "cancelled" } }).sort({
+    date: -1,
+  });
+  res.json(apps);
+});
+
+// 8. ADMIN ACTIONS - GET ALL USERS
+app.get("/api/admin/users", auth, async (req, res) => {
+  if (req.user.role !== "admin") return res.status(403).send("No access");
+  const users = await User.find({ role: { $ne: "admin" } })
+    .select("-password")
+    .sort({ firstName: 1 });
+  res.json(users);
+});
+
+// 9. ADMIN ACTIONS - MARK NO SHOW
+app.post("/api/admin/noshow", auth, async (req, res) => {
+  if (req.user.role !== "admin") return res.status(403).send("No access");
+  const { id } = req.body;
+
+  const app = await Appointment.findById(id);
+  if (app) {
+    app.status = "noshow";
+    await app.save();
+
+    const user = await User.findById(app.userId);
+    if (user) {
+      user.noShowCount += 1;
+      if (user.noShowCount >= 2) {
+        user.isBlocked = true;
+      }
+      await user.save();
+    }
+  }
+
+  res.json({ message: "Marked as No-Show" });
+});
+
+// 10. ADMIN ACTIONS - TOGGLE REGISTRATION
+app.post("/api/admin/toggle-registration", auth, async (req, res) => {
+  if (req.user.role !== "admin") return res.status(403).send("No access");
+
+  const settings = await Settings.findOne();
+  settings.acceptingNewClients = !settings.acceptingNewClients;
+  await settings.save();
+
+  res.json({
+    message: "Settings updated",
+    acceptingNewClients: settings.acceptingNewClients,
+  });
+});
+
+// --- АВТОМАТИЧНО ПОЧИСТВАНЕ ---
+const cleanupOldAppointments = async () => {
+  try {
+    const now = new Date();
+    // 1. Изтрий минали часове (по-стари от 24 часа)
+    const cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    await Appointment.deleteMany({ date: { $lt: cutoffDate } });
+
+    // 2. ИЗТРИЙ ВСИЧКИ ОТКАЗАНИ (Ако са останали някакви от предишни версии)
+    const deletedCancelled = await Appointment.deleteMany({
+      status: "cancelled",
+    });
+    if (deletedCancelled.deletedCount > 0) {
+      console.log(
+        `🧹 Изчистени ${deletedCancelled.deletedCount} отказани записа.`
+      );
+    }
+  } catch (err) {
+    console.error("Cleanup error:", err);
+  }
+};
+const seedAdmin = async () => {
+  try {
+    // Проверяваме дали вече има такъв потребител
+    const adminExists = await User.findOne({ username: "admin" });
+
+    if (!adminExists) {
+      // Хешираме паролата, защото логинът го изисква
+      const hashedPassword = await bcrypt.hash("admin12345", 10);
+
+      await User.create({
+        username: "admin",
+        password: hashedPassword,
+        firstName: "Admin", // Задължително поле според схемата
+        lastName: "System", // Задължително поле според схемата
+        phone: "0000000000", // Задължително поле според схемата
+        role: "admin", // ВАЖНО: даваме му права на админ
+      });
+
+      console.log("✅ Служебен акаунт създаден: admin / admin12345");
+    } else {
+      // Ако вече съществува, не правим нищо (за да не презапишем сменена парола)
+      // console.log("ℹ️ Админ акаунтът вече съществува.");
+    }
+  } catch (err) {
+    console.error("❌ Грешка при създаване на админ:", err);
+  }
+};
+mongoose
+  .connect(MONGO_URI)
   .then(async () => {
-    // Тази част се изпълнява само след успешна връзка с базата
+    const s = await Settings.findOne();
+    if (!s) await Settings.create({});
+    console.log("DB Connected successfully");
 
-    // 1. Създаване на служебен админ (ако няма такъв)
+    // 1. Създаваме админа при старт (ако го няма)
     await seedAdmin();
 
-    // 2. Първоначално почистване на стари часове
+    // 2. Стартираме почистването веднага
     await cleanupOldAppointments();
 
-    // 3. Настройване на автоматично почистване (на всеки 1 час)
-    // 3600000 ms = 1 час
+    // 3. И след това на всеки час
     setInterval(cleanupOldAppointments, 3600000);
 
-    // 4. Стартиране на сървъра
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌐 Frontend allowed from: ${FRONTEND_URL}`);
-    });
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
-  .catch((err) => {
-    console.error("❌ Failed to connect to Database. Server shutting down.");
-    process.exit(1); // Спира процеса, ако няма база данни
-  });
+  .catch((err) => console.log("DB Error:", err));
