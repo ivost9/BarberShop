@@ -1,0 +1,166 @@
+/* 1. Премахваме целия бял фон и рамки */
+.react-calendar {
+  background: transparent !important;
+  border: none !important;
+  width: 100% !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+}
+
+/* 2. Навигацията (Месец, Година, Стрелки) */
+.react-calendar__navigation {
+  margin-bottom: 1rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* СКРИВАМЕ ДВОЙНИТЕ СТРЕЛКИ (<< и >>) */
+.react-calendar__navigation__prev2-button,
+.react-calendar__navigation__next2-button {
+  display: none !important;
+}
+
+/* СТРЕЛКИТЕ ЗА МЕСЕЦА (< и >) */
+.react-calendar__navigation__prev-button,
+.react-calendar__navigation__next-button {
+  color: #f59e0b !important; /* Златно */
+  min-width: 40px !important;
+  background: none !important;
+  font-size: 2rem !important; /* По-големи стрелки */
+  font-weight: 300 !important; /* По-тънки и елегантни */
+  padding: 0 !important;
+  margin: 0 10px !important; /* Разстояние от текста */
+  cursor: pointer !important;
+  transition: transform 0.2s ease !important;
+}
+
+/* СКРИВАМЕ СТРЕЛКАТА НАЗАД, НО ЗАПАЗВАМЕ МЯСТОТО Й (Visibility: hidden) */
+.react-calendar__navigation__prev-button:disabled {
+  visibility: hidden !important; /* Елементът е невидим, но заема място */
+  pointer-events: none !important;
+}
+
+.react-calendar__navigation__prev-button:hover,
+.react-calendar__navigation__next-button:hover {
+  transform: scale(1.2);
+}
+
+.react-calendar__navigation button:enabled:hover,
+.react-calendar__navigation button:enabled:focus {
+  background-color: transparent !important; /* Махаме сивия фон на стрелките */
+}
+
+/* Текстът "НОЕМВРИ 2025" - НАМАЛЯВАМЕ РАЗМЕРА */
+.react-calendar__navigation__label {
+  flex-grow: 0 !important; /* Да не разпъва излишно */
+  pointer-events: none !important; /* Да не се клика върху месеца */
+}
+
+.react-calendar__navigation__label__labelText {
+  color: white !important;
+  text-transform: uppercase !important;
+  font-weight: 800 !important;
+  letter-spacing: 1px !important;
+  font-size: 1.1rem !important; /* Намален шрифт */
+  line-height: 1 !important;
+}
+
+/* 3. Дните от седмицата (ПН, ВТ, СР...) */
+.react-calendar__month-view__weekdays__weekday {
+  color: #52525b !important; /* По-тъмно сиво (Zinc-600) */
+  text-transform: uppercase !important;
+  font-weight: 700 !important;
+  text-decoration: none !important;
+  font-size: 0.75rem !important;
+  padding-bottom: 15px !important; /* Повече въздух под дните */
+}
+
+.react-calendar__month-view__weekdays__weekday abbr {
+  text-decoration: none !important;
+  cursor: default !important;
+}
+
+/* 4. Самите квадратче с дати */
+.react-calendar__tile {
+  background: none !important;
+  color: #e4e4e7 !important; /* Бял текст */
+  padding: 12px 0 !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+  font-size: 0.95rem !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* При посочване с мишката (САМО АКО НЕ Е МИНАЛ ДЕН) */
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus {
+  background-color: #3f3f46 !important; /* Сиво */
+  color: #f59e0b !important; /* Златен текст */
+  cursor: pointer !important;
+}
+
+/* 5. МИНАЛИ ДНИ (Disabled) - ПРОМЕНЕН КУРСОР */
+.react-calendar__tile:disabled {
+  background-color: transparent !important;
+  color: #3f3f46 !important; /* Много тъмно сиво */
+  opacity: 0.5 !important;
+  cursor: default !important; /* Стандартен курсор (стрелка), не ръчичка */
+  font-weight: 400 !important;
+}
+
+/* 6. Днешната дата */
+.react-calendar__tile--now {
+  background: transparent !important;
+  border: 1px solid #f59e0b !important; /* Златна рамка */
+  color: #f59e0b !important;
+}
+
+/* Ако днешната дата е избрана */
+.react-calendar__tile--now.react-calendar__tile--active {
+  background: #f59e0b !important;
+  color: black !important;
+}
+
+/* 7. АКТИВНАТА ДАТА (Избраната) */
+.react-calendar__tile--active {
+  background: #f59e0b !important; /* Златен фон */
+  color: black !important; /* Черен текст */
+  font-weight: 900 !important;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.4) !important; /* Светещ ефект */
+  transform: scale(1.05);
+  z-index: 10;
+}
+
+/* Махаме синьото селектиране при фокус */
+.react-calendar__tile--active:enabled:hover,
+.react-calendar__tile--active:enabled:focus {
+  background: #d97706 !important;
+}
+
+/* 8. ДНИ ОТ СЪСЕДНИ МЕСЕЦИ - ФИКСЪТ Е ТУК */
+.react-calendar__month-view__days__day--neighboringMonth {
+  color: #27272a !important; /* Почти черно (много тъмно сиво) */
+  opacity: 0.3 !important;
+  font-weight: 300 !important;
+  pointer-events: none !important; /* Забраняваме интеракцията */
+  transition: none !important; /* Спираме премигването */
+}
+
+/* 9. ПОДОБРЕНА АНИМАЦИЯ ПРИ СМЯНА */
+@keyframes fadeInTile {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Прилагаме анимацията върху самите плочки, не върху контейнера */
+.react-calendar__tile {
+  animation: fadeInTile 0.3s ease-out forwards;
+}

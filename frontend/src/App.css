@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================
+   PREMIUM BARBER CALENDAR STYLES
+   ========================================= */
+
+/* 1. Основен контейнер */
+
+.react-calendar {
+  width: 100% !important;
+  background: transparent !important;
+  border: none !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  line-height: 2.5em;
+}
+
+/* 2. Навигация (Месец и Стрелки) */
+.react-calendar__navigation {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.react-calendar__navigation button {
+  color: #f59e0b; /* Златно */
+  min-width: 44px;
+  background: none;
+  font-size: 24px;
+  margin-top: 8px;
+  border-radius: 50%;
+}
+
+.react-calendar__navigation button:enabled:hover {
+  background-color: #3f3f46;
+}
+
+/* Текстът "Ноември 2025" */
+.react-calendar__navigation__label {
+  color: white !important;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 1.2rem;
+}
+
+/* 3. Дните от седмицата (Пон, Вто...) */
+.react-calendar__month-view__weekdays {
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: bold;
+  font-size: 0.8em;
+  color: #71717a; /* Сиво */
+  border-bottom: 1px solid #3f3f46;
+  margin-bottom: 10px;
+}
+
+.react-calendar__month-view__weekdays__weekday abbr {
+  text-decoration: none;
+  cursor: default;
+}
+
+/* 4. Числата (Датите) */
+.react-calendar__tile {
+  color: #e4e4e7;
+  background: none;
+  border: none;
+  padding: 15px 0 !important;
+  font-size: 1rem;
+  font-weight: 500;
+  border-radius: 12px !important;
+  transition: all 0.2s ease;
+}
+
+/* 5. При посочване с мишката */
+.react-calendar__tile:enabled:hover {
+  background-color: #3f3f46 !important;
+  color: #f59e0b;
+}
+
+/* 6. ДНЕС */
+.react-calendar__tile--now {
+  background: transparent !important;
+  border: 1px solid #f59e0b !important;
+  color: #f59e0b !important;
+}
+
+/* 7. ИЗБРАНАТА ДАТА (Активната) */
+.react-calendar__tile--active {
+  background: #f59e0b !important; /* Плътно златно */
+  color: black !important;
+  font-weight: 900 !important;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+  transform: scale(1.1);
+}
+
+/* 8. Съседни месеци */
+.react-calendar__month-view__days__day--neighboringMonth {
+  opacity: 0.3;
+}
