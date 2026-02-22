@@ -1,7 +1,7 @@
 // src/config/corsOptions.js
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://barber-shop-teal.vercel.app",
+  "https://barber-shop-app2.vercel.app",
 ];
 
 const corsOptions = {
