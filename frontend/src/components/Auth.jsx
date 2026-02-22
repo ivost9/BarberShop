@@ -25,8 +25,77 @@ const Auth = ({ type, setToken, setRole, setUsername, setView }) => {
     }
   }, [type]);
 
+  // --- ФУНКЦИЯ ЗА ВАЛИДАЦИЯ ---
+  const validateForm = () => {
+    const { username, password, firstName, lastName, phone } = formData;
+
+    // 1. ПЪРВО: Проверка дали изобщо е попълнено нещо (Empty checks)
+    if (!username.trim() || !password.trim()) {
+      toast.error("Моля, попълнете всички полета");
+      return false;
+    }
+
+    if (type === "register") {
+      if (!firstName.trim() || !lastName.trim() || !phone.trim()) {
+        toast.error("Моля, попълнете всички полета за регистрация");
+        return false;
+      }
+      if (username.length < 3) {
+        toast.error("Потребителското име трябва да е поне 3 символа");
+        return false;
+      }
+
+      // Парола (8-30 символа)
+      if (password.length < 8 || password.length > 30) {
+        toast.error("Паролата трябва да бъде между 8 и 30 символа");
+        return false;
+      }
+
+      // Само за Регистрация
+      if (type === "register") {
+        const nameRegex = /^[A-Za-zА-Яа-я]+$/; // Само букви
+        const phoneRegex = /^08\d{8}$/; // Започва с 08 и е точно 10 цифри
+
+        if (
+          firstName.length < 3 ||
+          firstName.length > 30 ||
+          !nameRegex.test(firstName)
+        ) {
+          toast.error("Името трябва да е само с букви и между 3-30 символа");
+          return false;
+        }
+
+        if (
+          lastName.length < 3 ||
+          lastName.length > 30 ||
+          !nameRegex.test(lastName)
+        ) {
+          toast.error(
+            "Фамилията трябва да е само с букви и между 3-30 символа",
+          );
+          return false;
+        }
+
+        if (!phoneRegex.test(phone)) {
+          toast.error("Невалиден телефонен номер");
+          return false;
+        }
+      }
+    }
+
+    // 2. ВТОРО: Специфични формати (след като знаем, че не са празни)
+
+    // Потребителско име
+
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Първо минава през новата валидация
+    if (!validateForm()) return;
+
     setIsLoading(true);
     try {
       const res = await axios.post(`${API}/${type}`, formData);
@@ -39,14 +108,14 @@ const Auth = ({ type, setToken, setRole, setUsername, setView }) => {
         setRole(res.data.role);
         setUsername(res.data.username);
 
-        setView("dashboard"); // ВИНАГИ ОТИВА КЪМ DASHBOARD, ТАМ СЕ ОПРЕДЕЛЯ ИЗГЛЕДА
+        setView("dashboard");
         toast.success(`Здравейте, ${res.data.firstName || ""}!`);
       } else {
-        toast.success("Регистрацията успешна! Сега влезте.");
+        toast.success("Регистрацията е успешна! Сега влезте.");
         setView("login");
       }
     } catch (err) {
-      toast.error(err.response?.data?.error || "Грешка");
+      toast.error(err.response?.data?.error || "Възникна грешка");
     } finally {
       setIsLoading(false);
     }
@@ -60,13 +129,10 @@ const Auth = ({ type, setToken, setRole, setUsername, setView }) => {
           <h3 className="text-2xl font-bold text-white mb-4">
             РЕГИСТРАЦИИТЕ СА ЗАТВОРЕНИ
           </h3>
-          <p className="text-zinc-400 mb-8">
-            Съжаляваме, в момента графикът ни е пълен с редовни клиенти и не
-            приемаме нови регистрации.
-          </p>
+          <p className="text-zinc-400 mb-8">Съжаляваме, графикът ни е пълен.</p>
           <button
             onClick={() => setView("login")}
-            className="text-amber-500 hover:text-amber-400 underline underline-offset-4"
+            className="text-amber-500 hover:text-amber-400 underline"
           >
             Обратно към вход
           </button>
@@ -81,11 +147,11 @@ const Auth = ({ type, setToken, setRole, setUsername, setView }) => {
         <h2 className={header}>{type === "login" ? "ВХОД" : "РЕГИСТРАЦИЯ"}</h2>
         <form onSubmit={handleSubmit}>
           {type === "register" && (
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 mb-4">
               <input
                 className={input}
                 placeholder="Име"
-                required
+                required // <--- Връщаме native проверката
                 value={formData.firstName}
                 onChange={(e) =>
                   setFormData({ ...formData, firstName: e.target.value })
@@ -94,7 +160,7 @@ const Auth = ({ type, setToken, setRole, setUsername, setView }) => {
               <input
                 className={input}
                 placeholder="Фамилия"
-                required
+                required // <--- Връщаме native проверката
                 value={formData.lastName}
                 onChange={(e) =>
                   setFormData({ ...formData, lastName: e.target.value })
@@ -102,9 +168,9 @@ const Auth = ({ type, setToken, setRole, setUsername, setView }) => {
               />
               <input
                 className={input}
-                placeholder="Телефонен номер"
-                required
-                autoComplete="Телефон"
+                placeholder="Телефон"
+                type="tel"
+                required // <--- Връщаме native проверката
                 value={formData.phone}
                 onChange={(e) =>
                   setFormData({ ...formData, phone: e.target.value })
@@ -115,9 +181,8 @@ const Auth = ({ type, setToken, setRole, setUsername, setView }) => {
 
           <input
             className={input}
-            placeholder="Потребителско име (за вход)"
-            required
-            autoComplete="username"
+            placeholder="Потребителско име"
+            required // <--- Връщаме native проверката
             value={formData.username}
             onChange={(e) =>
               setFormData({ ...formData, username: e.target.value })
@@ -127,21 +192,22 @@ const Auth = ({ type, setToken, setRole, setUsername, setView }) => {
             className={input}
             type="password"
             placeholder="Парола"
-            required
-            autoComplete="current-password"
+            required // <--- Връщаме native проверката
             value={formData.password}
             onChange={(e) =>
               setFormData({ ...formData, password: e.target.value })
             }
           />
+
           <button
             disabled={isLoading}
-            className={`${btnPrimary} w-full flex justify-center items-center`}
+            className={`${btnPrimary} w-full flex justify-center items-center mt-4`}
           >
             {isLoading ? <span className="animate-spin mr-2">⏳</span> : null}
-            {type === "login" ? "ВЛЕЗ" : "РЕГИСТРИРАЙ СЕ"}
+            {type === "login" ? "ВЛЕЗ" : "РЕГИСТРАЦИЯ"}
           </button>
         </form>
+
         <div className="mt-4 text-center">
           <button
             onClick={() => setView(type === "login" ? "register" : "login")}

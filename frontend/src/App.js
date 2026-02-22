@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Toaster } from "react-hot-toast";
 import Home from "./components/Home";
 import Profile from "./components/Profile";
@@ -6,12 +6,32 @@ import Auth from "./components/Auth";
 import Navbar from "./components/Navbar";
 import Dashboard from "./components/Dashboard/Dashboard";
 import { theme } from "./utils/theme";
+import InstallPrompt from "./components/InstallPrompt";
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [role, setRole] = useState(localStorage.getItem("role"));
   const [username, setUsername] = useState(localStorage.getItem("username"));
   const [view, setView] = useState("home");
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      const registerSW = () => {
+        navigator.serviceWorker
+          .register("/sw.js")
+          .then((reg) => console.log("✅ SW Registered!", reg.scope))
+          .catch((err) => console.error("❌ SW Registration Failed", err));
+      };
+
+      // Ако страницата вече е заредена, регистрирай веднага
+      if (document.readyState === "complete") {
+        registerSW();
+      } else {
+        // Иначе чакай зареждането
+        window.addEventListener("load", registerSW);
+      }
+    }
+  }, []);
 
   const logout = () => {
     localStorage.clear();
@@ -23,6 +43,7 @@ function App() {
 
   return (
     <div className={theme.bg}>
+      <InstallPrompt />
       <Toaster position="top-center" />
       <Navbar
         view={view}

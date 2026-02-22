@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Appointment = require("../models/appointmentSchema");
+const appointmentController = require("../controllers/appointmentController");
 const User = require("../models/userSchema");
 const auth = require("../middleware/auth");
 
@@ -65,28 +66,5 @@ router.post("/book", auth, async (req, res) => {
 
   res.json({ message: "Success" });
 });
-
-// Оригинален път: /api/cancel
-router.post("/cancel", auth, async (req, res) => {
-  const { id } = req.body;
-  const appointment = await Appointment.findById(id);
-
-  if (!appointment) return res.status(404).json({ error: "Not found" });
-
-  if (req.user.role !== "admin") {
-    const appointmentTime = new Date(appointment.date).getTime();
-    const currentTime = new Date().getTime();
-    const hoursDiff = (appointmentTime - currentTime) / (1000 * 60 * 60);
-
-    if (hoursDiff < 12) {
-      return res.status(400).json({
-        error: "Твърде късно е за отказ онлайн. Моля свържете се с нас.",
-      });
-    }
-  }
-
-  await Appointment.findByIdAndDelete(id);
-  res.json({ message: "Deleted" });
-});
-
+router.post("/cancel", auth, appointmentController.cancelAppointment);
 module.exports = router;

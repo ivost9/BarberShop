@@ -6,9 +6,14 @@ import ClientCalendar from "../ClientCalendar";
 
 const ClientDashboard = ({ token, username }) => {
   const [appointments, setAppointments] = useState([]);
+  const [waitlist, setWaitlist] = useState([]); // Нова държава за списъка с чакащи
   const [date, setDate] = useState(new Date());
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
+
+  // ⚠️ ПОСТАВИ ТВОЯ ПУБЛИЧЕН VAPID КЛЮЧ ТУК
+  const PUBLIC_VAPID_KEY =
+    "BPf9GNR9-CJyjwzN7paUX6ttCqFzIKI6hn-30a9KgxECodJuvjVH-ar5Bf4eJWPBr1OAnMTUA5wtgTIif-qmZno";
 
   const fetchApps = async () => {
     try {
@@ -19,11 +24,23 @@ const ClientDashboard = ({ token, username }) => {
     }
   };
 
+  // Функция за зареждане на чакащите записи на потребителя
+  const fetchWaitlist = async () => {
+    try {
+      const res = await axios.get(`${API}/waitlist/my`, {
+        headers: { Authorization: token }, // Достатъчно е само токена, бекендът ще вземе ID-то
+      });
+      setWaitlist(res.data || []);
+    } catch (err) {
+      console.error("Waitlist fetch failed", err);
+    }
+  };
+
   useEffect(() => {
     fetchApps();
+    fetchWaitlist();
   }, []);
 
-  // 1. ИЗЧИСЛЯВАМЕ РЕЗЕРВАЦИЯТА ТУК
   const myAppointment = appointments.find(
     (app) =>
       app.username === username &&
@@ -31,12 +48,78 @@ const ClientDashboard = ({ token, username }) => {
       new Date(app.date) > new Date()
   );
 
-  // 2. АКТУАЛНАТА УСЛУГА Е ТАЗИ, КОЯТО Е ИЗБРАНА ИЛИ ТАЗИ ОТ РЕЗЕРВАЦИЯТА
   const effectiveService = selectedService || myAppointment?.serviceType;
+
+  const getServiceName = (type) => {
+    switch (type) {
+      case "full":
+        return "Коса + Брада";
+      case "shave":
+        return "Бръснене";
+      case "hair":
+        return "Подстригване";
+      default:
+        return "Подстригване";
+    }
+  };
+
+  // --- 🤖 ПУШ ИЗВЕСТИЯ ПОМОЩНИ ФУНКЦИИ ---
+  const urlBase64ToUint8Array = (base64String) => {
+    const cleanBase64 = base64String.trim().replace(/\s/g, "");
+    const padding = "=".repeat((4 - (cleanBase64.length % 4)) % 4);
+    const base64 = (cleanBase64 + padding)
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i)
+      outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  };
+
+  const handleWaitlistJoin = async (slotDate) => {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        toast.error("Трябва да разрешите известията!");
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+
+      // ВАЖНО ЗА CHROME: Провери за стар абонамент и го изчисти
+      const oldSub = await registration.pushManager.getSubscription();
+      if (oldSub) await oldSub.unsubscribe();
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY),
+      });
+
+      await axios.post(
+        `${API}/waitlist/join`,
+        {
+          date: slotDate.toISOString(),
+          subscription: subscription,
+        },
+        { headers: { Authorization: token } }
+      );
+
+      toast.success("Ще ви известим!");
+
+      // Изчакай съвсем малко преди да дръпнеш данните пак
+      setTimeout(() => {
+        fetchWaitlist();
+      }, 500);
+    } catch (err) {
+      console.error("Chrome Push Error:", err);
+      toast.error("Грешка при регистрация на известията");
+    }
+  };
 
   const book = async (slotDate) => {
     const isoDate = slotDate.toISOString();
-    const serviceName = effectiveService === "full" ? "Коса + Брада" : "Коса";
+    const serviceName = getServiceName(effectiveService);
 
     if (
       !window.confirm(
@@ -105,18 +188,26 @@ const ClientDashboard = ({ token, username }) => {
     const now = new Date();
     const isPast = slotStart < now;
 
-    const isTaken = appointments.some((app) => {
+    const appointmentAtTime = appointments.find((app) => {
       const appStart = new Date(app.date);
       const appDuration = app.duration || 30;
       const appEnd = new Date(appStart.getTime() + appDuration * 60000);
       return appStart < slotEnd && appEnd > slotStart;
     });
 
+    const isTaken = !!appointmentAtTime;
+    const isMyOwn = appointmentAtTime?.username === username;
+    const isWaiting = waitlist.some(
+      (w) => new Date(w.date).getTime() === slotStart.getTime()
+    );
+
     slots.push({
       time: `${hour}:${minute === 0 ? "00" : "30"}`,
       fullDate: slotStart,
       isTaken: isTaken,
       isPast: isPast,
+      isMyOwn: isMyOwn,
+      isWaiting: isWaiting,
     });
   };
 
@@ -193,10 +284,7 @@ const ClientDashboard = ({ token, username }) => {
               ✅ РЕЗЕРВИРАН ЧАС
             </h2>
             <p className="text-lg font-medium text-white/90">
-              {myAppointment.serviceType === "full"
-                ? "Коса + Брада"
-                : "Подстригване"}{" "}
-              на{" "}
+              {getServiceName(myAppointment.serviceType)} на{" "}
               <span className="font-black text-xl border-b-2 border-white/30 pb-0.5">
                 {new Date(myAppointment.date).toLocaleString("bg-BG", {
                   weekday: "long",
@@ -222,11 +310,11 @@ const ClientDashboard = ({ token, username }) => {
         </div>
       )}
 
-      {/* СТЪПКА 1: ИЗБОР НА УСЛУГА (Скриваме ако вече има час и не сме натиснали изрично за смяна) */}
+      {/* СТЪПКА 1: ИЗБОР НА УСЛУГА */}
       {!myAppointment && !selectedService && (
         <div className="animate-fade-in text-center">
           <h2 className="section-header">ИЗБЕРИ УСЛУГА</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             <div
               onClick={() => setSelectedService("hair")}
               className="service-card group"
@@ -234,10 +322,23 @@ const ClientDashboard = ({ token, username }) => {
               <div className="text-5xl mb-4 group-hover:scale-110 transition duration-300">
                 ✂️
               </div>
-              <h3 className="text-2xl font-bold text-white mb-2">
-                ПОДСТРИГВАНЕ
+              <h3 className="text-2xl font-bold text-white mb-2 uppercase">
+                Подстригване
               </h3>
               <p className="text-zinc-400">Класическо мъжко подстригване</p>
+            </div>
+
+            <div
+              onClick={() => setSelectedService("shave")}
+              className="service-card group"
+            >
+              <div className="text-5xl mb-4 group-hover:scale-110 transition duration-300">
+                🪒
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-2 uppercase">
+                Бръснене
+              </h3>
+              <p className="text-zinc-400">Оформяне на брада и бръснене</p>
             </div>
 
             <div
@@ -247,8 +348,8 @@ const ClientDashboard = ({ token, username }) => {
               <div className="text-5xl mb-4 group-hover:scale-110 transition duration-300">
                 🧔
               </div>
-              <h3 className="text-2xl font-bold text-white mb-2">
-                КОСА + БРАДА
+              <h3 className="text-2xl font-bold text-white mb-2 uppercase">
+                Коса + Брада
               </h3>
               <p className="text-zinc-400">Пълен пакет грижа за визията</p>
             </div>
@@ -256,13 +357,12 @@ const ClientDashboard = ({ token, username }) => {
         </div>
       )}
 
-      {/* СТЪПКА 2: КАЛЕНДАР И ЧАСОВЕ (Показваме ако има избрана услуга ИЛИ ако вече има резервация) */}
+      {/* СТЪПКА 2: КАЛЕНДАР И ЧАСОВЕ */}
       {(selectedService || myAppointment) && (
         <div className="flex flex-col md:flex-row gap-8 animate-fade-in">
           <div className="md:w-1/2">
             <div className="flex justify-between items-center mb-6">
               <h2 className="section-header mb-0">ИЗБЕРИ ДАТА</h2>
-              {/* Показваме бутона за смяна само ако няма активна резервация */}
               {!myAppointment && (
                 <button
                   onClick={() => setSelectedService(null)}
@@ -292,8 +392,8 @@ const ClientDashboard = ({ token, username }) => {
             <h2 className="section-header">СВОБОДНИ ЧАСОВЕ</h2>
             <p className="text-center text-zinc-500 mb-4 text-sm">
               За услуга:{" "}
-              <span className="text-white font-bold">
-                {effectiveService === "full" ? "Коса + Брада" : "Подстригване"}
+              <span className="text-white font-bold uppercase">
+                {getServiceName(effectiveService)}
               </span>
             </p>
 
@@ -311,26 +411,46 @@ const ClientDashboard = ({ token, username }) => {
               <>
                 <div className="grid grid-cols-3 gap-3">
                   {generateSlots().map((slot, index) => (
-                    <button
-                      key={index}
-                      // Забранен ако е зает, минал или ако това е моят собствен час (или имам активна резервация)
-                      disabled={slot.isTaken || slot.isPast || !!myAppointment}
-                      onClick={() => book(slot.fullDate)}
-                      className={`
-                        py-3 rounded-lg font-bold transition duration-200 border relative overflow-hidden group
-                        ${
-                          slot.isTaken
-                            ? "bg-red-900/20 border-red-900/50 text-red-500/50 cursor-not-allowed"
-                            : slot.isPast
-                            ? "bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed"
-                            : !!myAppointment // Ако имам резервация, показвам го като неактивен (сив)
-                            ? "bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed "
-                            : "bg-zinc-800 border-amber-500/50 text-white hover:bg-amber-500 hover:text-zinc-900 hover:border-amber-500 shadow-[0_0_10px_rgba(0,0,0,0.3)]"
+                    <div key={index} className="relative group">
+                      <button
+                        disabled={
+                          slot.isTaken || slot.isPast || !!myAppointment
                         }
-                      `}
-                    >
-                      {slot.isTaken ? "ЗАЕТО" : slot.time}
-                    </button>
+                        onClick={() => book(slot.fullDate)}
+                        className={`
+                          w-full py-3 rounded-lg font-bold transition duration-200 border relative overflow-hidden
+                          ${
+                            slot.isTaken
+                              ? "bg-red-900/20 border-red-900/50 text-red-500/50 cursor-not-allowed"
+                              : slot.isPast
+                              ? "bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed"
+                              : !!myAppointment
+                              ? "bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed "
+                              : "bg-zinc-800 border-amber-500/50 text-white hover:bg-amber-500 hover:text-zinc-900 hover:border-amber-500 shadow-[0_0_10px_rgba(0,0,0,0.3)]"
+                          }
+                        `}
+                      >
+                        {slot.isTaken ? "ЗАЕТО" : slot.time}
+                      </button>
+
+                      {/* 🔔 КАМБАНКА ЗА WAITLIST: Показва се само при ЗАЕТО, ако не е минало и не е твоят час */}
+                      {slot.isTaken && !slot.isPast && !slot.isMyOwn && (
+                        <button
+                          onClick={() => handleWaitlistJoin(slot.fullDate)}
+                          className={`
+                            absolute -top-2 -right-2 w-8 h-8 rounded-full border flex items-center justify-center shadow-xl transition-all z-20
+                            ${
+                              slot.isWaiting
+                                ? "bg-amber-500 text-black border-white scale-110"
+                                : "bg-zinc-800 text-amber-500 border-zinc-600 hover:scale-125"
+                            }
+                          `}
+                          title="Извести ме, ако се освободи"
+                        >
+                          {slot.isWaiting ? "🔔" : "🔕"}
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
                 {generateSlots().every((s) => s.isTaken || s.isPast) && (
