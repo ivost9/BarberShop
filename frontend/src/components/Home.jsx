@@ -11,8 +11,7 @@ const Home = ({ setView, token }) => {
       </h1>
 
       <p className="text-lg sm:text-xl text-zinc-400 mb-8 max-w-2xl mx-auto">
-        Класическо бръснене и модерни прически в атмосфера на истински мъжки
-        клуб.
+        Класическо бръснене и модерни прически.
       </p>
 
       {/* Conditional Rendering за бутоните */}
